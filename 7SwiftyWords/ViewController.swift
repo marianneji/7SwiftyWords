@@ -15,6 +15,17 @@ class ViewController: UIViewController {
     var scoreLabel: UILabel!
     var currentAnswer: UITextField!
     var letterButtons = [UIButton]()
+    var numberOfQuestion = 0
+    
+    var activatedButtons = [UIButton]()
+    var solutions = [String]()
+    
+    var score = 0 {
+        didSet {
+            scoreLabel.text = "Score: \(score)"
+        }
+    }
+    var level = 1
     
     override func loadView() {
         view = UIView()
@@ -54,11 +65,13 @@ class ViewController: UIViewController {
         let submit = UIButton(type: .system)
         submit.translatesAutoresizingMaskIntoConstraints = false
         submit.setTitle("Submit", for: .normal)
+        submit.addTarget(self, action: #selector(submitTapped), for: .touchUpInside)
         view.addSubview(submit)
         
         let clear = UIButton(type: .system)
         clear.translatesAutoresizingMaskIntoConstraints = false
         clear.setTitle("Clear", for: .normal)
+        clear.addTarget(self, action: #selector(clearTapped), for: .touchUpInside)
         view.addSubview(clear)
         
         let buttonsView = UIView()
@@ -95,23 +108,124 @@ class ViewController: UIViewController {
         
         for row in 0..<4 {
             for col in 0..<5 {
-                let lettersButton = UIButton(type: .system)
-                lettersButton.setTitle("WWW", for: .normal)
-                lettersButton.titleLabel?.font = UIFont.systemFont(ofSize: 36)
+                let letterButton = UIButton(type: .system)
+                letterButton.setTitle("WWW", for: .normal)
+                letterButton.titleLabel?.font = UIFont.systemFont(ofSize: 36)
+                letterButton.layer.borderWidth = 1
+                letterButton.layer.borderColor = UIColor.gray.cgColor
+                letterButton.addTarget(self, action: #selector(letterTapped), for: .touchUpInside)
                 
                 let frame = CGRect(x: col * width, y: row * height, width: width, height: height)
-                lettersButton.frame = frame
+                letterButton.frame = frame
                 
-                buttonsView.addSubview(lettersButton)
+                buttonsView.addSubview(letterButton)
+                letterButtons.append(letterButton)
             }
         }
     }
-
+    
     override func viewDidLoad() {
         super.viewDidLoad()
-        // Do any additional setup after loading the view.
+        loadLevel()
     }
-
-
+    
+    func loadLevel() {
+        var clueString = ""
+        var solutionString = ""
+        var letterBits = [String]()
+        if let levelFileUrl = Bundle.main.url(forResource: "level\(level)", withExtension: "txt") {
+            if let levelContent = try? String(contentsOf: levelFileUrl) {
+                var lines = levelContent.components(separatedBy: "\n")
+                lines.shuffle()
+                
+                for (index, lines) in lines.enumerated() {
+                    let parts = lines.components(separatedBy: ": ")
+                    let clue = parts[1]
+                    let answer = parts[0]
+                    
+                    clueString += "\(index + 1). \(clue)\n"
+                    
+                    let solutionWord = answer.replacingOccurrences(of: "|", with: "")
+                    solutionString += "\(solutionWord.count) letters\n"
+                    solutions.append(solutionWord)
+                    
+                    let bits = answer.components(separatedBy: "|")
+                    letterBits += bits
+                }
+            }
+        }
+        
+        cluesLabel.text = clueString.trimmingCharacters(in: .whitespacesAndNewlines)
+        answerLabel.text = solutionString.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        letterBits.shuffle()
+        
+        if letterBits.count == letterButtons.count {
+            for i in 0..<letterBits.count {
+                letterButtons[i].setTitle(letterBits[i], for: .normal)
+            }
+        }
+    }
+    
+    @objc func submitTapped(_ sender: UIButton) {
+        guard let answerText = currentAnswer.text else { return }
+        
+        if let solutionPosition = solutions.firstIndex(of: answerText) {
+            activatedButtons.removeAll()
+            
+            var splitAnswers = answerLabel.text?.components(separatedBy: "\n")
+            splitAnswers?[solutionPosition] = answerText
+            answerLabel.text = splitAnswers?.joined(separator: "\n")
+            
+            currentAnswer.text = ""
+            score += 1
+            numberOfQuestion += 1
+            
+            if numberOfQuestion == 7 {
+                let ac = UIAlertController(title: "Well done!", message: "Ready for next level?", preferredStyle: .alert)
+                ac.addAction(UIAlertAction(title: "Let's go!", style: .default, handler: levelUp))
+                present(ac, animated: true)
+            }
+            
+        } else {
+            let ac = UIAlertController(title: "Wrong answer!", message: nil, preferredStyle: .alert)
+            ac.addAction(UIAlertAction(title: "ok", style: .default, handler: clearAnswer))
+            present(ac, animated: true)
+            score -= 1
+        }
+    }
+    
+    func clearAnswer(action: UIAlertAction) {
+        
+        for buttons in activatedButtons {
+            clearTapped(buttons)
+        }
+    }
+    
+    @objc func clearTapped(_ sender: UIButton) {
+        
+        currentAnswer.text = ""
+        
+        for buttons in activatedButtons {
+            buttons.isHidden = false
+        }
+        activatedButtons.removeAll()
+    }
+    
+    @objc func letterTapped(_ sender: UIButton) {
+        guard let buttonTitle = sender.titleLabel?.text else { return }
+        currentAnswer.text = currentAnswer.text?.appending(buttonTitle)
+        activatedButtons.append(sender)
+        sender.isHidden = true
+    }
+    
+    func levelUp(action: UIAlertAction) {
+        level += 1
+        solutions.removeAll(keepingCapacity: true)
+        loadLevel()
+        for buttons in letterButtons {
+            buttons.isHidden = false
+        }
+    }
 }
 
